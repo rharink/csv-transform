@@ -1,0 +1,14 @@
+[package]
+name = "csv-transform"
+version = "0.1.0"
+authors = ["Robert den Harink <robert@robhar.com>"]
+edition = "2018"
+
+[dependencies]
+csv = "1"
+toml = "0.4.2"
+rlua = "0.16.2"
+heck = "0.3.1"
+serde = "1"
+serde_derive = "1"
+clap = "2.33.0"

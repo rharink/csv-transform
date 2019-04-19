@@ -1,0 +1,25 @@
+version = "1"
+
+print_header = true
+
+[[columns]]
+name = "firstname"
+exclude = false
+func = """
+if firstname == 'robert' then
+  return 'Roberto!'
+else
+  return firstname
+end
+"""
+
+[[columns]]
+name = "lastname"
+exclude = true
+
+[[columns]]
+name = "extra"
+exclude = false
+func = """
+return 'extra'
+"""
