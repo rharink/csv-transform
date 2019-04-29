@@ -1,6 +1,14 @@
 version = "1"
 
-print_header = true
+[input]
+delimiter = ","
+trim = true
+double_quote = false
+quoting = true
+
+[output]
+header = true
+double_quote = true
 
 [[columns]]
 name = "firstname"
@@ -21,5 +29,5 @@ exclude = true
 name = "extra"
 exclude = false
 func = """
-return 'extra'
+return firstname..' '..lastname
 """
