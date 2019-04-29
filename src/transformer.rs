@@ -2,12 +2,8 @@ use crate::config::{Config, ColDef};
 use crate::config;
 use std::io;
 use csv::StringRecord;
-use std::error::Error;
 use heck::SnakeCase;
-use std::convert::identity;
-use std::collections::HashSet;
-use std::str::FromStr;
-use std::iter::{Zip, repeat};
+use std::iter::{repeat};
 use rlua::{Context, Lua};
 
 pub struct Transformer {
@@ -27,57 +23,116 @@ impl Transformer {
     }
 
     /// Transform transforms the csv as configured
-    pub fn transform(&mut self) -> Result<(), String> {
-        let header_info = get_header_info(&self.config, &mut self.reader);
+    pub fn transform(&mut self) {
         let lua = Lua::new();
 
-        if self.config.output.header {
-            self.writer.write_record(header_info.output_headers.iter());
-        }
-
-        for values in self.reader.records() {
-            //let row = get_row(&self.config, raw_row.unwrap(), &header_info);
+        lua.context(|ctx| {
+            let header_info = get_header_info(&self.config, &mut self.reader);
             let config = &self.config;
-            let out =
-                header_info.output_headers.iter().zip(
-                    // Chain the iter of values with a repeat so extra columns get a default value
-                    // and appear in the map and fold below.
-                    values.unwrap().iter().chain(repeat(""))
 
-                // Set all row values as globals in the Lua context
-                ).map(|(key, value)| {
-                    lua.context(|ctx| {
-                        let g = ctx.globals();
-                        g.set(key.as_str(), value);
-                    });
-                    (key, value)
+            if self.config.output.header {
+                self.writer.write_record(header_info.output_headers.iter()).unwrap();
+            }
 
-                // Filter the row based on a lua function
-                }).filter(|_|{
-                    lua.context(|ctx| {
-                        if let Some(f) = &config.filter {
-                            ctx.load(f).eval().unwrap_or(true)
-                        } else {
-                            true
-                        }
-                })
+            let record = self.reader.records();
+            for values in record {
+                let values = values.unwrap();
+                let row = Row::new(&config, &header_info, &values, &ctx);
+                if row.filter(&config.filter) {
+                    self.writer.write_record(row.to_string_record().iter()).unwrap();
+                }
+            }
+        });
+    }
+}
 
-                // Create a new string record from possibly transformed values.
-                }).fold(StringRecord::new(), |mut acc, (key, value)| {
-                    if let Some(def) = &config.get_column_definition(key.as_str()) {
-                        lua.context(|ctx| {
-                            acc.push_field(transform_value(&ctx, def.get_func(), value).as_str());
-                        });
-                    } else {
-                        acc.push_field(value);
-                    }
-                    acc
-                });
+#[derive(Debug)]
+struct Column<'a> {
+    def: ColDef,
+    value: &'a str,
+}
 
-            // Write the record to the output
-            self.writer.write_record(out.iter());
+impl<'a> Column<'a> {
+    pub fn new(def: ColDef, value: &'a str) -> Column<'a> {
+        Column{
+            def,
+            value,
         }
-        Ok(())
+    }
+
+    pub fn get_name(&self) -> &str {
+        self.def.get_name()
+    }
+
+    pub fn get_value(&self) -> &str {
+        self.value
+    }
+
+    pub fn get_value_with_context(&self, ctx: &Context) -> Result<String, String> {
+        if let Some(f) = self.def.get_func() {
+            return match ctx.load(f).eval() {
+                Ok(s) => Ok(s),
+                Err(e) => Err(format!("error while executing function {:?} {:?}", e, f)),
+            };
+        }
+
+        return Ok(self.value.to_string());
+    }
+
+    pub fn is_excluded(&self) -> bool {
+        self.def.get_exclude().unwrap_or(false)
+    }
+}
+
+struct Row<'a, 'b, 'c> {
+    cols: Vec<Column<'a>>,
+    ctx: &'b Context<'c>,
+}
+
+impl<'a, 'b, 'c> Row<'a, 'b, 'c> {
+    fn new(config: &Config, header_info: &HeaderInfo, values: &'a StringRecord, ctx: &'b Context<'c>) -> Row<'a, 'b, 'c> {
+        let zipper = header_info.output_headers.iter().zip(values.iter().chain(repeat("")));
+        let row = Row {
+            cols: zipper.map(|(key, value)| {
+                let the_def = match config.get_column_definition(key.as_str()) {
+                    Some(def) => def.clone(),
+                    None => ColDef::new(key.clone()),
+                };
+                Column::new(the_def, value)
+            }).collect(),
+            ctx,
+        };
+        row.set_context(ctx);
+        row
+    }
+
+    fn set_context(&self, ctx: &Context) {
+        let cols = &self.cols;
+        let g = ctx.globals();
+        cols.iter().for_each(|col|{
+            g.set(col.get_name(), col.get_value()).unwrap();
+        });
+    }
+
+    fn filter(&self, filter: &Option<String>) -> bool {
+        match filter {
+            Some(f) => self.ctx.load(&f).eval().unwrap_or(true),
+            None => true
+        }
+    }
+
+    fn to_string_record(&self) -> csv::StringRecord {
+        self.cols.iter()
+            .filter(|col| {
+                !col.is_excluded()
+            })
+            .fold(csv::StringRecord::new(), |mut acc, col| {
+                match col.get_value_with_context(&self.ctx) {
+                    Ok(val) => acc.push_field(val.as_str()),
+                    Err(e) => panic!(e),
+                }
+                acc
+            })
     }
 }
 
@@ -174,14 +229,4 @@ fn build_writer(cfg: &config::Output, wtr: Box<dyn io::Write>) -> csv::Writer<Bo
     builder.from_writer(wtr)
 }
 
-fn transform_value(ctx: &Context, func: &Option<String>, value: &str) -> String {
-    if let Some(f) = func {
-        match ctx.load(f).eval::<String>() {
-            Ok(v) => return v,
-            Err(e) => panic!("error while executing function {:?} {:?}", e, func),
-        }
-    }
-
-    value.to_string()
-}
 

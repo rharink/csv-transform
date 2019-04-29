@@ -19,10 +19,11 @@ impl Default for Config {
     }
 }
 
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 pub struct ColDef {
     name: String,
     func: Option<String>,
+    exclude: Option<bool>,
 }
 
 impl ColDef {
@@ -30,12 +31,21 @@ impl ColDef {
     {
         ColDef {
             name,
-            func: None
+            func: None,
+            exclude: None,
         }
     }
 
     pub fn get_func(&self) -> &Option<String> {
         &self.func
+    }
+
+    pub fn get_name(&self) -> &str {
+        &self.name.as_str()
+    }
+
+    pub fn get_exclude(&self) -> &Option<bool> {
+        &self.exclude
     }
 }
 

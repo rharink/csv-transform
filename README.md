@@ -13,3 +13,8 @@ Headers must be unique, headers are converted to snake case
 - [X] Filter rows using lua functions
 - [ ] Headers can be transformed using lua functions
 - [ ] Exclude columns
+
+## Run the example
+```bash
+cargo run -- -c fixtures/example-config.toml < fixtures/test.csv
+```
