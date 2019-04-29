@@ -12,7 +12,7 @@ Headers must be unique, headers are converted to snake case
 - [X] Handle escaping
 - [X] Filter rows using lua functions
 - [ ] Headers can be transformed using lua functions
-- [ ] Exclude columns
+- [X] Exclude columns
 
 ## Run the example
 ```bash
