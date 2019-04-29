@@ -7,10 +7,9 @@ Headers must be unique, headers are converted to snake case
 
 ## Features
 - [x] Columns can be transformed using lua functions 
-- [ ] Headers can be transformed using lua functions
 - [X]  Columns can be created
-- [ ] Exclude columns
 - [X] Change delimiter
 - [X] Handle escaping
-- [ ] Filter rows using lua functions
-
+- [X] Filter rows using lua functions
+- [ ] Headers can be transformed using lua functions
+- [ ] Exclude columns
