@@ -30,14 +30,13 @@ impl Transformer {
             let header_info = get_header_info(&self.config, &mut self.reader);
             let config = &self.config;
 
-            if self.config.output.header {
-                self.writer.write_record(header_info.output_headers.iter()).unwrap();
-            }
-
             let record = self.reader.records();
-            for values in record {
+            for (i, values) in record.enumerate() {
                 let values = values.unwrap();
                 let row = Row::new(&config, &header_info, &values, &ctx);
+                if i == 0 && config.output.header {
+                    self.writer.write_record(row.get_output_headers().iter()).unwrap();
+                }
                 if row.filter(&config.filter) {
                     self.writer.write_record(row.to_string_record().iter()).unwrap();
                 }
@@ -90,8 +89,8 @@ struct Row<'a, 'b, 'c> {
 }
 
 impl<'a, 'b, 'c> Row<'a, 'b, 'c> {
-    fn new(config: &Config, header_info: &HeaderInfo, values: &'a StringRecord, ctx: &'b Context<'c>) -> Row<'a, 'b, 'c> {
-        let zipper = header_info.output_headers.iter().zip(values.iter().chain(repeat("")));
+    pub fn new(config: &Config, header_info: &HeaderInfo, values: &'a StringRecord, ctx: &'b Context<'c>) -> Row<'a, 'b, 'c> {
+        let zipper = header_info.total_headers.iter().zip(values.iter().chain(repeat("")));
         let row = Row {
             cols: zipper.map(|(key, value)| {
                 let the_def = match config.get_column_definition(key.as_str()) {
@@ -114,14 +113,14 @@ impl<'a, 'b, 'c> Row<'a, 'b, 'c> {
         });
     }
 
-    fn filter(&self, filter: &Option<String>) -> bool {
+    pub fn filter(&self, filter: &Option<String>) -> bool {
         match filter {
             Some(f) => self.ctx.load(&f).eval().unwrap_or(true),
             None => true
         }
     }
 
-    fn to_string_record(&self) -> csv::StringRecord {
+    pub fn to_string_record(&self) -> csv::StringRecord {
         self.cols.iter()
             .filter(|col| {
                 !col.is_excluded()
@@ -134,12 +133,21 @@ impl<'a, 'b, 'c> Row<'a, 'b, 'c> {
                 acc
             })
     }
+
+    pub fn get_output_headers(&self) -> StringRecord {
+        self.cols.iter().fold(StringRecord::new(), |mut acc, col|{
+            if ! col.is_excluded() {
+                acc.push_field(col.get_name());
+            }
+            acc
+        })
+    }
 }
 
 #[derive(Debug)]
 struct HeaderInfo {
     original_headers: Vec<String>,
-    output_headers: Vec<String>
+    total_headers: Vec<String>
 }
 
 fn get_header_info(cfg: &Config, rdr: &mut csv::Reader<Box<dyn io::Read>>) -> HeaderInfo {
@@ -154,7 +162,7 @@ fn get_header_info(cfg: &Config, rdr: &mut csv::Reader<Box<dyn io::Read>>) -> He
             acc
         });
 
-    let output_headers = cfg.get_headers()
+    let total_headers = cfg.get_headers()
         .iter()
         .fold(headers.clone(),|mut acc, header|{
             if ! acc.contains(header) {
@@ -165,7 +173,7 @@ fn get_header_info(cfg: &Config, rdr: &mut csv::Reader<Box<dyn io::Read>>) -> He
 
     HeaderInfo {
         original_headers: headers,
-        output_headers,
+        total_headers,
     }
 }
 

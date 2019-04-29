@@ -12,6 +12,7 @@ double_quote = true
 
 [[columns]]
 name = "firstname"
+exclude = true
 func = """
 if firstname == 'robert' then
   return 'Roberto!'
@@ -21,10 +22,15 @@ end
 """
 
 [[columns]]
-name = "lastname"
+name = "middlename"
+exclude = true
 
 [[columns]]
-name = "extra"
+name = "lastname"
+exclude = true
+
+[[columns]]
+name = "fullname"
 func = """
-return firstname..' '..lastname
+return firstname..' '..middlename..' '..lastname
 """
